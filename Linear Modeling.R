@@ -1,69 +1,93 @@
 library(tidyverse)
+library(scales)
 
 
 #-----------------------------------House Price vs Download Speed for both Counties in single diagram (include linear model summary report and correlation)---------------------------------------------------------------
 
 HousePrices = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_House_Prices.csv") %>%
-  select(shortPostcode, Price, County)
+  select(shortPostcode, Price)
 
 BroadBandSpeed = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_BroadBand_Speed.csv") %>%
   select(shortPostcode, Median_Download)
 
-CombinedData = inner_join(HousePrices, BroadBandSpeed, by = "shortPostcode") %>%
-  filter(!is.na(Price) & !is.na(Median_Download))
+Town = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Towns.csv") %>%
+  select(shortPostcode, Town, County)
 
-table(CombinedData$County)
+CombinedData = HousePrices %>%
+  inner_join(BroadBandSpeed, by = "shortPostcode") %>%
+  inner_join(Town, by = "shortPostcode") %>%
+  filter(!is.na(Price) & !is.na(Median_Download) & !is.na(Town))
 
+
+set.seed(123)
 SampleData = CombinedData %>%
-  group_by(County) %>%
-  sample_n(1000000) %>%
-  ungroup()
+  sample_n(100)
 
-ggplot(data = SampleData) +
-  geom_point(mapping = aes(x = Median_Download, y = Price, colour = County), alpha = 0.4, size = 1.2) +
-  geom_smooth(mapping = aes(x = Median_Download, y = Price, colour = County), method = "lm", se = TRUE) +
+
+SampleModel = lm(Price ~ Median_Download, data = SampleData)
+
+
+SampleData = SampleData %>%
+  mutate(
+    Predicted = predict(SampleModel),
+    Residual = Price - Predicted
+  )
+
+ggplot(SampleData, aes(x = Median_Download, y = Price)) +
+  geom_point(aes(color = Town), size = 2.5, alpha = 0.8) +  # Actual points by town
+  geom_smooth(method = "lm", se = FALSE, color = "black", size = 1.2) +  # Black regression line
+  geom_segment(aes(xend = Median_Download, yend = Predicted), color = "black", alpha = 0.6) +  # Residuals
   labs(
-    title = "House Price vs Download Speed by County",
+    title = "House Price vs Download Speed",
     x = "Median Download Speed (Mbps)",
     y = "House Price (£)",
-    colour = "County"
+    colour = "Town"
   ) +
-  scale_y_continuous(labels = comma) +
+  scale_y_continuous(labels = scales::comma) +
   theme_minimal()
+
+
+FullModel = lm(Price ~ Median_Download, data = CombinedData)
+
 
 correlation = cor(CombinedData$Price, CombinedData$Median_Download, use = "complete.obs")
 cat("Correlation between Price and Download Speed:", correlation, "\n")
 
-model = lm(Price ~ Median_Download * County, data = CombinedData)
-capture.output(summary(model), file = "Model_Summary.txt")
-
-
+summary(FullModel)
 
 
 #--------------------------------House price vs Drug rates (2023) per 10000 people for both counties in single diagram (include linear model summary report and correlation)-----------------------------------------
 
+
 library(tidyverse)
+library(lubridate)
+library(scales)
+library(stringr)
 
 
 HousePrices = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_House_Prices.csv") %>%
-  mutate(Year = year(ymd(Date)),
-         County = str_to_title(County)) %>%
+  mutate(
+    Year = year(ymd(Date)),
+    County = str_trim(str_to_upper(County)),
+    shortPostcode = str_trim(str_to_upper(shortPostcode))
+  ) %>%
   filter(Year == 2023) %>%
   select(shortPostcode, Price, County)
 
 
 Crime = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_Crime_Dataset.csv") %>%
-  mutate(Year = as.integer(substr(Month, 1, 4)),
-         District = str_extract(`LSOAname`, "^[^ ]+"),
-         County = str_replace(County, " Police$", ""),
-         County = str_to_title(County)) %>%
+  mutate(
+    Year = as.integer(substr(Month, 1, 4)),
+    County = str_replace(County, " Police$", ""),
+    County = str_trim(str_to_upper(County))
+  ) %>%
   filter(Year == 2023, CrimeType == "Drugs") %>%
   group_by(County) %>%
-  summarise(DrugCrimes = n())
+  summarise(DrugCrimes = n(), .groups = "drop")
 
 
 Population = tibble(
-  County = c("South Yorkshire", "West Yorkshire"),
+  County = c("SOUTH YORKSHIRE", "WEST YORKSHIRE"),
   Population = c(1417000, 2342000)
 )
 
@@ -72,32 +96,65 @@ CrimeRate = inner_join(Crime, Population, by = "County") %>%
   mutate(DrugRatePer10k = DrugCrimes / Population * 10000)
 
 
-CombinedData_Detailed = inner_join(HousePrices, CrimeRate, by = "County")
-
-# Printing head to see the structure of the new data
-print(head(CombinedData_Detailed))
-
-ggplot(data = CombinedData_Detailed, aes(x = DrugRatePer10k, y = Price, colour = County)) +
-    geom_point(alpha = 0.5, size = 1) + # Use alpha for overplotting
-    geom_smooth(method = "lm", se = TRUE) +
-    labs(
-      title = "House Price vs Drug Crime Rate per 10,000 People (2023)",
-      x = "Drug Crime Rate per 10,000",
-      y = "House Price (£)",
-      colour = "County"
-    ) +
-    scale_y_continuous(labels = comma) +
-    theme_minimal()
+Town = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Towns.csv") %>%
+  mutate(
+    shortPostcode = str_trim(str_to_upper(shortPostcode)),
+    County = str_trim(str_to_upper(County))
+  ) %>%
+  select(shortPostcode, Town, County)
 
 
-model_attainment = lm(Price ~ Attainment8 * County, data = CombinedData_Detailed)
+HousePrices_Town = inner_join(HousePrices, Town, by = c("shortPostcode", "County"))
+
+
+CombinedData = inner_join(HousePrices_Town, CrimeRate, by = "County") %>%
+  filter(!is.na(Price), !is.na(DrugRatePer10k), !is.na(Town))
+
+
+CombinedData = CombinedData %>%
+  mutate(DrugRatePer10k_jitter = DrugRatePer10k + runif(n(), -0.05, 0.05))
+
+
+FullModel = lm(Price ~ DrugRatePer10k, data = CombinedData)
+
+
+CombinedData = CombinedData %>%
+  mutate(
+    Predicted = predict(FullModel),
+    Residual = Price - Predicted
+  )
+
+
+ggplot(CombinedData, aes(x = DrugRatePer10k_jitter, y = Price)) +
+  geom_point(aes(color = Town), size = 2.5, alpha = 0.8) +                             
+  geom_smooth(aes(x = DrugRatePer10k), method = "lm", se = FALSE, color = "black", size = 1.2) + 
+  geom_segment(aes(xend = DrugRatePer10k, yend = Predicted), color = "black", alpha = 0.6) +     
+  labs(
+    title = "House Price vs Drug Crime Rate per 10,000 (2023)",
+    x = "Drug Crime Rate per 10,000",
+    y = "House Price (£)",
+    colour = "Town"
+  ) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
 
 cat("\n--- Linear Model Summary Report ---\n")
-print(summary(model_attainment))
+print(summary(FullModel))
 
-correlation_attainment = cor(CombinedData_Detailed$Price, CombinedData_Detailed$Attainment8, use = "complete.obs")
+
+correlation = cor(CombinedData$Price, CombinedData$DrugRatePer10k, use = "complete.obs")
 cat("\n--- Correlation Analysis ---\n")
-cat("Overall Correlation between House Price and Attainment 8 Score:", correlation_attainment, "\n")
+cat("Correlation between House Price and Drug Crime Rate per 10,000:", correlation, "\n")
+
+
+
+
+
+
+
+
 
 
 
@@ -166,6 +223,98 @@ cat("Correlation between House Price and Attainment 8 Score:", sprintf("%.4f", c
 model = lm(Price ~ Attainment8 * County, data = CombinedData)
 cat("\n--- Linear Model Summary Report ---\n")
 summary(model)
+
+
+
+
+
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(stringr)
+
+HousePrices = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_House_Prices.csv") %>%
+  mutate(
+    Year = year(ymd(Date)),
+    County = str_trim(str_to_upper(County)),
+    shortPostcode = str_trim(str_to_upper(shortPostcode))
+  ) %>%
+  filter(Year == 2023) %>%
+  select(shortPostcode, Price, County)
+
+Town = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Towns.csv") %>%
+  mutate(
+    shortPostcode = str_trim(str_to_upper(shortPostcode)),
+    County = str_trim(str_to_upper(County)),
+    Town = str_to_title(Town)
+  ) %>%
+  select(shortPostcode, Town, County)
+
+HousePrices_Town = inner_join(HousePrices, Town, by = c("shortPostcode", "County"))
+
+School_2021_2022 = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_School_2021-2022.csv") %>%
+  mutate(Year = 2022L)
+
+School_2022_2023 = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_School_2022-2023.csv") %>%
+  mutate(Year = 2023L)
+
+School_2023_2024 = read_csv("C:/Users/sthas/OneDrive/Documents/Stage 2 - Sem 2/ST5014CEM Data Science for Developers/Assignment/Coursework(DataScience_SantoshShrestha_230181)/Cleaned Data/Cleaned_School_2023-2024.csv") %>%
+  mutate(Year = 2024L)
+
+AllSchools = bind_rows(School_2021_2022, School_2022_2023, School_2023_2024) %>%
+  mutate(
+    County = case_when(
+      toupper(TOWN) %in% c("SOUTH YORKSHIRE", "WEST YORKSHIRE") ~ str_to_upper(TOWN),
+      toupper(ADDRESS3) %in% c("SOUTH YORKSHIRE", "WEST YORKSHIRE") ~ str_to_upper(ADDRESS3),
+      TRUE ~ NA_character_
+    ),
+    EBACCAPS = as.numeric(EBACCAPS)
+  ) %>%
+  filter(!is.na(County), !is.na(EBACCAPS)) %>%
+  select(County, Year, EBACCAPS)
+
+CombinedData = HousePrices_Town %>%
+  inner_join(AllSchools, by = "County") %>%
+  rename(Attainment8 = EBACCAPS) %>%
+  mutate(
+    Attainment8_jitter = Attainment8 + runif(n(), -0.1, 0.1)
+  )
+
+FullModel = lm(Price ~ Attainment8, data = CombinedData)
+
+CombinedData = CombinedData %>%
+  mutate(
+    Predicted = predict(FullModel),
+    Residual = Price - Predicted
+  )
+
+ggplot(CombinedData, aes(x = Attainment8_jitter, y = Price, color = Town)) +
+  geom_point(alpha = 0.8, size = 2.5) +
+  geom_smooth(aes(x = Attainment8), method = "lm", se = FALSE, color = "black", linewidth = 1.2) +
+  geom_segment(aes(xend = Attainment8, yend = Predicted), color = "black", alpha = 0.5) +
+  labs(
+    title = "House Price vs Attainment 8 Score",
+    x = "Attainment 8 Score",
+    y = "House Price (£, 2023)",
+    colour = "Town"
+  ) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+cat("\n--- Linear Model Summary Report ---\n")
+print(summary(FullModel))
+
+correlation = cor(CombinedData$Price, CombinedData$Attainment8, use = "complete.obs")
+cat("\n--- Correlation Analysis ---\n")
+cat("Correlation between House Price and Attainment 8 Score:", correlation, "\n")
+
+
+
+
+
+
+
 
 
 
