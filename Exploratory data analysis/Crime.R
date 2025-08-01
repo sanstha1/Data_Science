@@ -17,29 +17,40 @@ crime = crime %>%
 
 
 
-#Bar Graph – Drug Offense Rate per District (Two Diagrams)
+#Box plot– Drug Offense Rate per District (Two Diagrams)
 
-#South Yorkshire
-crime %>%
-  filter(CrimeType == "Drugs", !is.na(District), County == "South Yorkshire") %>%
-  group_by(District) %>%
-  summarise(Offenses = n()) %>%
-  ggplot(aes(x = reorder(District, Offenses), y = Offenses)) +
-  geom_col(fill = "orange", color = "black") +
-  labs(title = "South Yorkshire: Drug Offenses by District",
-       x = "District", y = "Drug Offense Count") +
-  theme_minimal()
 
-#West Yorkshire
-crime %>%
-  filter(CrimeType == "Drugs", !is.na(District), County == "West Yorkshire") %>%
-  group_by(District) %>%
-  summarise(Offenses = n()) %>%
-  ggplot(aes(x = reorder(District, Offenses), y = Offenses)) +
-  geom_col(fill = "red", color = "black") +
-  labs(title = "West Yorkshire: Drug Offenses by District",
-       x = "District", y = "Drug Offense Count") +
-  theme_minimal()
+# South Yorkshire Drug Offenses by District-Year
+south_yorkshire = crime %>%
+  filter(CrimeType == "Drugs", County == "South Yorkshire", !is.na(District)) %>%
+  group_by(District, Year) %>%
+  summarise(Offenses = n(), .groups = "drop")
+
+# Boxplot for South Yorkshire
+ggplot(south_yorkshire, aes(x = reorder(District, Offenses, FUN = median), y = Offenses)) +
+  geom_boxplot(fill = "orange", outlier.alpha = 0.9) +
+  labs(title = "South Yorkshire: Drug Offense Distribution by District",
+       x = "District", y = "Offenses per Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+# West Yorkshire Drug Offenses by District-Year
+west_yorkshire = crime %>%
+  filter(CrimeType == "Drugs", County == "West Yorkshire", !is.na(District)) %>%
+  group_by(District, Year) %>%
+  summarise(Offenses = n(), .groups = "drop")
+
+# Boxplot for West Yorkshire
+ggplot(west_yorkshire, aes(x = reorder(District, Offenses, FUN = median), y = Offenses)) +
+  geom_boxplot(fill = "red", outlier.alpha = 0.9) +
+  labs(title = "West Yorkshire: Drug Offense Distribution by District",
+       x = "District", y = "Offenses per Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 
 
 
@@ -113,31 +124,39 @@ drug_crime_by_district = crime %>%
   summarise(Total_Offenses = n(), .groups = "drop") %>%
   mutate(Year = as.integer(Year))  
 
+drug_crime_by_district = drug_crime_by_district %>%
+  mutate(District = str_to_upper(str_trim(District)))
+
+town_long = town_long %>%
+  mutate(District = str_to_upper(str_trim(District)))
+
+
 merged_data = drug_crime_by_district %>%
   left_join(town_long, by = c("District", "Year")) %>%
   filter(!is.na(Population)) %>%
-  mutate(
-    Rate_per_10000 = (Total_Offenses / Population) * 10000,
-    Year = as.integer(Year)  
-  )
+  mutate(Rate_per_10000 = (Total_Offenses / Population) * 10000)
 
 final_data = merged_data %>%
-  group_by(County, Year) %>%
+  group_by(District, Year) %>%
   summarise(
     Total_Offenses = sum(Total_Offenses, na.rm = TRUE),
     Population = sum(Population, na.rm = TRUE),
     Rate_per_10000 = (Total_Offenses / Population) * 10000,
     .groups = "drop"
-  ) %>%
-  mutate(Year = as.integer(Year))
+  )
 
-ggplot(final_data, aes(x = Year, y = Rate_per_10000, color = County)) +
-  geom_line(size = 1.2) +
+
+ggplot(final_data, aes(x = Year, y = Rate_per_10000, color = District)) +
+  geom_line(linewidth = 1.2) +
   geom_point(size = 3) +
   labs(
-    title = "Drug Offense Rates per 10,000 People (2022–2024)",
+    title = "Drug Offense Rates per 10,000 People by District (2022–2024)",
     x = "Year",
     y = "Rate per 10,000",
-    color = "County"
+    color = "District"
   ) +
   theme_minimal(base_size = 14)
+
+
+
+
