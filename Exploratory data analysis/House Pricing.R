@@ -15,7 +15,7 @@ unique(HousePrices$Year)
 
 
 
-
+#By County
 # average by County & Year
 county_year_avg = HousePrices %>%
   group_by(County, Year) %>%
@@ -32,9 +32,28 @@ ggplot(county_year_avg, aes(x = Year, y = AveragePrice, colour = County)) +
 
 
 
+#By District
+district_year_avg = HousePrices %>%
+  group_by(District, Year) %>%
+  summarise(AveragePrice = mean(Price, na.rm = TRUE), .groups = "drop")
+
+# Plot: Average price by District and Year
+ggplot(district_year_avg, aes(x = Year, y = AveragePrice, colour = District)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Average House Prices by District (2021–2024)",
+       x = "Year", y = "Average Price") +
+  theme_minimal() +
+  theme(legend.position = "right")
 
 
 
+
+
+#-------------------------------------------------------------------------------------------------------------------------------
+
+#by county
 # average by County in 2023 only
 county_2023_avg = county_year_avg %>%
   filter(Year == 2023)
@@ -51,9 +70,30 @@ ggplot(county_2023_avg, aes(x = County, y = AveragePrice, fill = County)) +
 
 
 
+#by district
+district_2023_avg = HousePrices %>%
+  mutate(Year = year(ymd(Date))) %>%
+  filter(Year == 2023) %>%
+  group_by(District) %>%
+  summarise(AveragePrice = mean(Price, na.rm = TRUE), .groups = "drop")
+
+# Bar chart: Average house price by District in 2023
+ggplot(district_2023_avg, aes(x = reorder(District, -AveragePrice), y = AveragePrice, fill = District)) +
+  geom_col(width = 0.5) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Average House Prices by District (2023)",
+       x = "District", y = "Average Price") +
+  theme_minimal() +
+  theme(legend.position = "none", 
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 
+
+
+#------------------------------------------------------------------------------------------------------------------------------------
+
+#by county
 #Box‑plots: 2021‑2024 distribution for each county in separate panels
 
 ggplot(county_year_avg, aes(x = "", y = AveragePrice)) +
@@ -63,3 +103,17 @@ ggplot(county_year_avg, aes(x = "", y = AveragePrice)) +
   labs(title = "Distribution of House Prices (2021–2024)",
        y = "Price", x = "") +
   theme_minimal()
+
+
+
+#District
+
+ggplot(district_year_avg, aes(x = reorder(District, AveragePrice, FUN = median), y = AveragePrice)) +
+  geom_boxplot(fill = "lightgreen", outlier.alpha = 0.9) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Yearly Average House Prices by District (2021–2024)",
+       x = "District", y = "Average Price") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
